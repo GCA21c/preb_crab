@@ -43,10 +43,10 @@ class LampLabel(QWidget):
 
     def set_active(self, active: bool) -> None:
         if active:
-            self.lamp.setStyleSheet('color:#ffffff; font-size:16px;')
+            self.lamp.setStyleSheet('color:#18a34a; font-size:16px;')
             self.text.setStyleSheet('color:#ffffff;')
         else:
-            self.lamp.setStyleSheet('color:#c8d0d8; font-size:16px;')
+            self.lamp.setStyleSheet('color:#9aa3ad; font-size:16px;')
             self.text.setStyleSheet('color:#c8d0d8;')
 
 
@@ -153,11 +153,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(9)
         self.origin_title = LampLabel('ORIGIN')
-        self.clipboard_title = LampLabel('CLIPBOARD', left_padding=12)
-        self.here_title = LampLabel('HERE', left_padding=-10)
+        self.clipboard_title = LampLabel('CLIPBOARD', left_padding=6)
+        self.here_title = LampLabel('HERE', left_padding=-22)
         self.origin_title.layout.insertWidget(2, self.doc_slots_label)
         self.origin_title.layout.addWidget(self.btn_close_doc)
+        self.clipboard_count_label.setContentsMargins(-12, 0, 0, 0)
         self.clipboard_title.layout.insertWidget(2, self.clipboard_count_label)
+        self.here_slots_label.setContentsMargins(-6, 0, 0, 0)
         self.here_title.layout.insertWidget(2, self.here_slots_label)
         layout.addWidget(self.origin_title, 4)
         layout.addWidget(self.clipboard_title, 3)
