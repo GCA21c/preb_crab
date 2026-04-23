@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -171,6 +171,9 @@ class MainWindow(QMainWindow):
         self.clipboard_store = ClipboardStore()
         self.pdf_exporter = PdfExporter()
         self.project_store = ProjectStore()
+        self.settings = QSettings('Prep_Crab', 'Prep_Crab')
+        self.last_doc_dir = self.settings.value('paths/last_doc_dir', str(Path.home()), type=str)
+        self.last_project_dir = self.settings.value('paths/last_project_dir', str(Path.home()), type=str)
         self.active_panel = 'origin'
         self.undo_stack: list[dict] = []
 
@@ -425,7 +428,14 @@ class MainWindow(QMainWindow):
     def _load_doc(self) -> None:
         self._show_busy('문서 로드 중', '불러올 문서를 선택하는 중...')
         try:
-            loaded = self.loader.open_file_dialog(self, progress_callback=self._update_busy_message)
+            loaded = self.loader.open_file_dialog(
+                self,
+                progress_callback=self._update_busy_message,
+                initial_dir=self.last_doc_dir,
+            )
+            if self.loader.last_opened_dir:
+                self.last_doc_dir = self.loader.last_opened_dir
+                self.settings.setValue('paths/last_doc_dir', self.last_doc_dir)
             if loaded:
                 self.origin_view.refresh()
                 self._update_doc_slots()
@@ -642,9 +652,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, 'SET Save 오류', str(exc))
 
     def _load_project(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, '작업 불러오기', str(Path.home()), 'Doc Capture Project (*.dcap)')
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            '작업 불러오기',
+            self.last_project_dir or str(Path.home()),
+            'Doc Capture Project (*.dcap)',
+        )
         if not path:
             return
+        try:
+            self.last_project_dir = str(Path(path).expanduser().resolve().parent)
+        except Exception:
+            self.last_project_dir = str(Path(path).parent)
+        self.settings.setValue('paths/last_project_dir', self.last_project_dir)
         self._show_busy('작업 불러오는 중', f'프로젝트를 복원하는 중...\n{Path(path).name}')
         try:
             data = self.project_store.load(path)

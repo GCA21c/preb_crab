@@ -29,6 +29,7 @@ class DocumentLoader:
         self.loaded_documents: list[LoadedDocument] = []
         self.doc_index: int = -1
         self.page_index: int = 0
+        self.last_opened_dir: str | None = None
         self._last_word_error: str = ''
         self._last_hwp_error: str = ''
         self._progress_callback: Callable[[str], None] | None = None
@@ -50,15 +51,24 @@ class DocumentLoader:
             return None
         return self.loaded_documents[self.doc_index]
 
-    def open_file_dialog(self, parent: QWidget, progress_callback: Callable[[str], None] | None = None) -> bool:
+    def open_file_dialog(
+        self,
+        parent: QWidget,
+        progress_callback: Callable[[str], None] | None = None,
+        initial_dir: str | None = None,
+    ) -> bool:
         paths, _ = QFileDialog.getOpenFileNames(
             parent,
             '문서 불러오기',
-            '',
+            initial_dir or '',
             '지원 문서 (*.pdf *.doc *.docx *.hwp *.hwpx);;PDF Files (*.pdf);;Word Files (*.doc *.docx);;Hancom Files (*.hwp *.hwpx)',
         )
         if not paths:
             return False
+        try:
+            self.last_opened_dir = str(Path(paths[0]).expanduser().resolve().parent)
+        except Exception:
+            self.last_opened_dir = str(Path(paths[0]).parent)
         loaded_any = False
         self._progress_callback = progress_callback
         try:
