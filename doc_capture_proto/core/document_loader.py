@@ -12,7 +12,7 @@ from typing import Optional
 
 import fitz
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument, QTextOption
+from PySide6.QtGui import QColor, QFont, QImage, QPainter
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 
@@ -660,19 +660,21 @@ class DocumentLoader:
         image.fill(Qt.white)
         painter = QPainter(image)
         painter.setPen(QColor(Qt.black))
-        doc = QTextDocument()
         font = QFont('Malgun Gothic')
         font.setPointSize(12)
-        doc.setDefaultFont(font)
-        doc.setDefaultStyleSheet('body { color: #000000; } p { color: #000000; }')
-        option = QTextOption()
-        option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
-        doc.setDefaultTextOption(option)
+        painter.setFont(font)
         plain = text.replace('\r\n', '\n').replace('\r', '\n')
-        doc.setPlainText(plain)
-        doc.setTextWidth(page_size[0] - margin * 2)
-        painter.translate(margin, margin)
-        doc.drawContents(painter, QRectF(0, 0, page_size[0] - margin * 2, page_size[1] - margin * 2))
+        text_rect = QRectF(
+            float(margin),
+            float(margin),
+            float(page_size[0] - margin * 2),
+            float(page_size[1] - margin * 2),
+        )
+        painter.drawText(
+            text_rect,
+            int(Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap | Qt.TextExpandTabs),
+            plain,
+        )
         painter.end()
         return image
 
