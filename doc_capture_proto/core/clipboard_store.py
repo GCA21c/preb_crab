@@ -40,6 +40,8 @@ class ClipboardStore:
     def set_current(self, index: int) -> None:
         if 0 <= index < len(self.items):
             self.current_index = index
+        elif index < 0:
+            self.current_index = -1
         elif not self.items:
             self.current_index = -1
 

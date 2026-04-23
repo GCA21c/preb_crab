@@ -181,6 +181,7 @@ HERE
                 self.saved_preview.set_image(current.image if current else None, index)
             else:
                 self.store.set_current(-1)
+                self.list_widget.setCurrentRow(-1)
                 self.list_widget.clearSelection()
                 self.saved_preview.set_image(None, -1)
         finally:
