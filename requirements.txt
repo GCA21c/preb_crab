@@ -4,8 +4,3 @@ Pillow
 reportlab
 olefile
 pywin32; platform_system == "Windows"
-simple-hwp2pdf
-gethwp
-python-hwpx
-pyhwpx
-helper-hwp
