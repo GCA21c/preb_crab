@@ -54,7 +54,11 @@ class OriginView(QWidget):
     def refresh(self) -> None:
         self._save_current_view_state()
         self.page_image = self.loader.render_current_page(scale=self.render_scale)
-        self._restore_current_view_state()
+        key = self._current_view_key()
+        if key is not None and key in self.page_view_states:
+            self._restore_current_view_state()
+        else:
+            self._reset_view_to_fit(save_state=False)
         self._reset_pan_if_needed()
         if self.page_image is None:
             self._live_timer.stop()
@@ -136,17 +140,31 @@ class OriginView(QWidget):
         self._zoom_at(QPointF(self.width() / 2, self.height() / 2), 1 / 1.15)
 
     def reset_view(self) -> None:
-        self.view_scale = self.default_view_scale
-        self.pan = QPointF(self.default_pan)
-        self._reset_pan_if_needed()
-        self._save_current_view_state()
-        self._schedule_live_preview()
-        self.update()
+        self._reset_view_to_fit(save_state=True)
 
     def _image_draw_rect(self) -> QRectF:
         if self.page_image is None:
             return QRectF()
         return QRectF(-self.pan.x(), -self.pan.y(), self.page_image.width() * self.view_scale, self.page_image.height() * self.view_scale)
+
+    def _fit_view_scale_for_image(self) -> float:
+        if self.page_image is None or self.width() <= 0 or self.height() <= 0:
+            return self.default_view_scale
+        margin = 24.0
+        avail_w = max(1.0, float(self.width()) - margin)
+        avail_h = max(1.0, float(self.height()) - margin)
+        scale_w = avail_w / float(self.page_image.width())
+        scale_h = avail_h / float(self.page_image.height())
+        return max(0.1, min(min(scale_w, scale_h), 4.0))
+
+    def _reset_view_to_fit(self, save_state: bool) -> None:
+        self.view_scale = self._fit_view_scale_for_image()
+        self.pan = QPointF(self.default_pan)
+        self._reset_pan_if_needed()
+        if save_state:
+            self._save_current_view_state()
+        self._schedule_live_preview()
+        self.update()
 
     def _view_to_image_rectf(self, rect: QRectF) -> QRectF:
         if self.page_image is None:
