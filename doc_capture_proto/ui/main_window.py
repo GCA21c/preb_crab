@@ -54,7 +54,7 @@ class LampLabel(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle('문서 캡쳐 · 이식 · PDF 생성 프로토타입')
+        self.setWindowTitle('Preb Crab™ ver 0.1')
         self.resize(1600, 950)
 
         self.loader = DocumentLoader()
@@ -176,6 +176,10 @@ class MainWindow(QMainWindow):
                     'source_index': int(block.get('source_index', -1)),
                     'content_left': float(block.get('content_left', 0.0)),
                     'content_right': float(block.get('content_right', block.get('original_w', block['image'].width()) - 1)),
+                    'size_history': [
+                        (float(size_w), float(size_h))
+                        for size_w, size_h in block.get('size_history', [])
+                    ],
                 })
                 if 'temp_path' in block:
                     page_blocks[-1]['temp_path'] = block['temp_path']

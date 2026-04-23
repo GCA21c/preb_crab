@@ -148,6 +148,7 @@ class HereView(QWidget):
             'temp_path': str(temp_path),
             'content_left': content_left,
             'content_right': content_right,
+            'size_history': [],
         }
 
     def add_block(self, image: QImage, source_index: int = -1, x: float | None = None, y: float | None = None) -> None:
@@ -175,6 +176,7 @@ class HereView(QWidget):
                 block.setdefault('original_h', float(block.get('h', block['image'].height())))
                 block.setdefault('content_left', 0.0)
                 block.setdefault('content_right', float(block.get('original_w', block['image'].width()) - 1))
+                block.setdefault('size_history', [])
         self._emit_selected_clipboard_index()
         self.update()
 
@@ -258,6 +260,28 @@ class HereView(QWidget):
                 return handle
         return None
 
+    def _push_size_history(self, block: dict) -> None:
+        history = block.setdefault('size_history', [])
+        current = (float(block['w']), float(block['h']))
+        if history and history[-1] == current:
+            return
+        history.append(current)
+
+    def _restore_previous_size(self, block: dict) -> bool:
+        history = block.setdefault('size_history', [])
+        if history:
+            previous_w, previous_h = history.pop()
+            block['w'] = float(previous_w)
+            block['h'] = float(previous_h)
+            return True
+        original_w = float(block.get('original_w', block['image'].width()))
+        original_h = float(block.get('original_h', block['image'].height()))
+        if float(block['w']) == original_w and float(block['h']) == original_h:
+            return False
+        block['w'] = original_w
+        block['h'] = original_h
+        return True
+
     def _view_to_scene(self, pos: QPointF) -> QPointF:
         return QPointF((pos.x() + self.pan.x()) / self.zoom, (pos.y() + self.pan.y()) / self.zoom)
 
@@ -317,12 +341,15 @@ class HereView(QWidget):
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             if 0 <= self.selected_index < len(self.blocks) and self._block_rect_view(self.blocks[self.selected_index]).contains(event.position()):
-                self.history_checkpoint_requested.emit()
                 block = self.blocks[self.selected_index]
-                block['w'] = float(block.get('original_w', block['image'].width()))
-                block['h'] = float(block.get('original_h', block['image'].height()))
-                self.update()
-                return
+                if block.get('size_history') or (
+                    float(block['w']) != float(block.get('original_w', block['image'].width()))
+                    or float(block['h']) != float(block.get('original_h', block['image'].height()))
+                ):
+                    self.history_checkpoint_requested.emit()
+                if self._restore_previous_size(block):
+                    self.update()
+                    return
             if not self._page_rect_view().contains(event.position()):
                 self.reset_view()
                 return
@@ -352,6 +379,7 @@ class HereView(QWidget):
                 self.selected_index = i
                 self.resizing_block = True
                 self.resize_mode = handle
+                self._push_size_history(block)
                 self.history_checkpoint_requested.emit()
                 if handle == 'right':
                     self.setCursor(Qt.SizeHorCursor)
@@ -393,13 +421,28 @@ class HereView(QWidget):
             else:
                 original_w = max(1.0, float(block.get('original_w', block['image'].width())))
                 original_h = max(1.0, float(block.get('original_h', block['image'].height())))
+                current_w = max(min_size, float(block['w']))
+                current_h = max(min_size, float(block['h']))
                 aspect_ratio = original_h / original_w
-                width_by_dx = float(block['w']) + delta.x() / self.zoom
-                height_by_dy = float(block['h']) + delta.y() / self.zoom
-                target_w = max(width_by_dx, height_by_dy / aspect_ratio)
-                target_w = max(min_size, target_w)
+                width_by_dx = max(min_size, current_w + delta.x() / self.zoom)
+                height_by_dy = max(min_size, current_h + delta.y() / self.zoom)
+                scale_x = width_by_dx / current_w
+                scale_y = height_by_dy / current_h
+                if scale_x >= 1.0 and scale_y >= 1.0:
+                    scale = max(scale_x, scale_y)
+                elif scale_x <= 1.0 and scale_y <= 1.0:
+                    scale = min(scale_x, scale_y)
+                elif abs(scale_x - 1.0) >= abs(scale_y - 1.0):
+                    scale = scale_x
+                else:
+                    scale = scale_y
+                target_w = max(min_size, current_w * scale)
+                target_h = max(min_size, target_w * aspect_ratio)
+                if target_h < min_size:
+                    target_h = min_size
+                    target_w = max(min_size, target_h / aspect_ratio)
                 block['w'] = target_w
-                block['h'] = max(min_size, target_w * aspect_ratio)
+                block['h'] = target_h
             self.drag_last = pos
             self.update()
             return

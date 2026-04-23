@@ -9,6 +9,7 @@ from doc_capture_proto.core.clipboard_store import ClipboardItem, ClipboardStore
 
 class ImagePreview(QWidget):
     drag_started = Signal(object, int)
+    double_clicked = Signal(object, int)
 
     def __init__(self, title: str, draggable: bool = False) -> None:
         super().__init__()
@@ -44,6 +45,13 @@ class ImagePreview(QWidget):
         self.drag_started.emit(self.image, self.source_index)
         drag.exec(Qt.CopyAction)
         self._drag_start = None
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.LeftButton and self.image is not None and self.source_index >= 0:
+            self.double_clicked.emit(self.image, self.source_index)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -111,6 +119,7 @@ HERE
         self._passive_selection = False
         self.list_widget.currentRowChanged.connect(self._on_row_changed)
         self.list_widget.itemDoubleClicked.connect(self._on_double_clicked)
+        self.saved_preview.double_clicked.connect(self._on_saved_preview_double_clicked)
         self.list_widget.installEventFilter(self)
 
         layout = QVBoxLayout(self)
@@ -207,3 +216,8 @@ HERE
         current = self.store.current()
         if current is not None:
             self.send_to_here.emit(current.image, row)
+
+    def _on_saved_preview_double_clicked(self, image: QImage, row: int) -> None:
+        self.interaction_started.emit('clipboard')
+        self.store.set_current(row)
+        self.send_to_here.emit(image, row)
