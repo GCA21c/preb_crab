@@ -68,6 +68,18 @@ class PanelHeader(QWidget):
         self.title_label.set_active(active)
 
 
+class PanelControls(QWidget):
+    def __init__(self, buttons: list[QPushButton]) -> None:
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        for button in buttons:
+            button.setMinimumHeight(28)
+            layout.addWidget(button, 0)
+        layout.addStretch(1)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -137,30 +149,14 @@ class MainWindow(QMainWindow):
         self.btn_load_doc = QPushButton('문서불러오기')
         self.btn_save = QPushButton('SET Save')
         self.btn_reset = QPushButton('새로고침')
-        self.btn_prev_doc = QPushButton('<<')
-        self.btn_prev_page = QPushButton('<')
-        self.btn_next_page = QPushButton('>')
-        self.btn_next_doc = QPushButton('>>')
-        self.btn_capture = QPushButton('capture')
-        self.btn_here_add_page = QPushButton('HERE +PAGE')
-        self.btn_here_del_page = QPushButton('HERE -PAGE')
         self.btn_pdf = QPushButton('PDF OUTPUT')
 
         for w in [
-            self.btn_load_set, self.btn_load_doc, self.btn_save, self.btn_reset,
-            self.btn_prev_doc, self.btn_prev_page, self.btn_next_page, self.btn_next_doc,
-            self.btn_capture, self.btn_here_add_page, self.btn_here_del_page, self.btn_pdf,
+            self.btn_load_set, self.btn_load_doc, self.btn_save, self.btn_reset, self.btn_pdf,
         ]:
             layout.addWidget(w)
 
         self.btn_load_doc.clicked.connect(self._load_doc)
-        self.btn_prev_doc.clicked.connect(self._prev_doc)
-        self.btn_next_doc.clicked.connect(self._next_doc)
-        self.btn_prev_page.clicked.connect(self._prev_page)
-        self.btn_next_page.clicked.connect(self._next_page)
-        self.btn_capture.clicked.connect(self.origin_view.do_capture)
-        self.btn_here_add_page.clicked.connect(self._add_here_page)
-        self.btn_here_del_page.clicked.connect(self._delete_here_page)
         self.btn_pdf.clicked.connect(self._export_pdf)
         self.btn_reset.clicked.connect(self._reset_all)
         self.btn_save.clicked.connect(self._save_project)
@@ -168,23 +164,57 @@ class MainWindow(QMainWindow):
         return layout
 
     def _build_content(self):
+        self.btn_origin_prev_doc = QPushButton('<<')
+        self.btn_origin_prev_page = QPushButton('<')
+        self.btn_origin_next_page = QPushButton('>')
+        self.btn_origin_next_doc = QPushButton('>>')
+        self.btn_origin_prev_doc.clicked.connect(self._prev_doc)
+        self.btn_origin_prev_page.clicked.connect(self._prev_origin_page)
+        self.btn_origin_next_page.clicked.connect(self._next_origin_page)
+        self.btn_origin_next_doc.clicked.connect(self._next_doc)
+
+        self.btn_here_prev_page = QPushButton('<')
+        self.btn_here_next_page = QPushButton('>')
+        self.btn_here_add_page = QPushButton('+')
+        self.btn_here_del_page = QPushButton('x')
+        self.btn_here_del_page.setFixedWidth(24)
+        self.btn_here_del_page.setStyleSheet(self.btn_close_doc.styleSheet())
+        self.btn_here_prev_page.clicked.connect(self._prev_here_page)
+        self.btn_here_next_page.clicked.connect(self._next_here_page)
+        self.btn_here_add_page.clicked.connect(self._add_here_page)
+        self.btn_here_del_page.clicked.connect(self._confirm_delete_here_page)
+
         self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label, self.btn_close_doc)
         self.clipboard_header = PanelHeader('CAPTURE BLOCKS', self.clipboard_count_label)
         self.here_header = PanelHeader('HERE', self.here_slots_label)
+        self.origin_controls = PanelControls([
+            self.btn_origin_prev_doc,
+            self.btn_origin_prev_page,
+            self.btn_origin_next_page,
+            self.btn_origin_next_doc,
+        ])
+        self.here_controls = PanelControls([
+            self.btn_here_prev_page,
+            self.btn_here_next_page,
+            self.btn_here_add_page,
+            self.btn_here_del_page,
+        ])
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(9)
-        layout.addWidget(self._build_panel_column(self.origin_header, self.origin_view), 4)
-        layout.addWidget(self._build_panel_column(self.clipboard_header, self.clipboard_view), 3)
-        layout.addWidget(self._build_panel_column(self.here_header, self.here_view), 4)
+        layout.addWidget(self._build_panel_column(self.origin_header, self.origin_controls, self.origin_view), 4)
+        layout.addWidget(self._build_panel_column(self.clipboard_header, None, self.clipboard_view), 3)
+        layout.addWidget(self._build_panel_column(self.here_header, self.here_controls, self.here_view), 4)
         return layout
 
-    def _build_panel_column(self, header: QWidget, body: QWidget) -> QWidget:
+    def _build_panel_column(self, header: QWidget, controls: QWidget | None, body: QWidget) -> QWidget:
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(6)
         panel_layout.addWidget(header, 0)
+        if controls is not None:
+            panel_layout.addWidget(controls, 0)
         panel_layout.addWidget(body, 1)
         panel.setMinimumWidth(180)
         panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -450,9 +480,31 @@ class MainWindow(QMainWindow):
             self.loader.next_page()
             self.origin_view.refresh()
 
+    def _prev_origin_page(self) -> None:
+        self.loader.prev_page()
+        self.origin_view.refresh()
+
+    def _next_origin_page(self) -> None:
+        self.loader.next_page()
+        self.origin_view.refresh()
+
+    def _prev_here_page(self) -> None:
+        self.here_view.prev_page()
+        self._update_here_slots()
+
+    def _next_here_page(self) -> None:
+        self.here_view.next_page()
+        self._update_here_slots()
+
     def _add_here_page(self) -> None:
         self.here_view.add_page()
         self._update_here_slots()
+
+    def _confirm_delete_here_page(self) -> None:
+        reply = QMessageBox.question(self, 'HERE 페이지 삭제', '현재 HERE 페이지를 삭제하시겠습니까?')
+        if reply != QMessageBox.Yes:
+            return
+        self._delete_here_page()
 
     def _delete_here_page(self) -> None:
         self.here_view.delete_current_page()
