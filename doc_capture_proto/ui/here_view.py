@@ -163,7 +163,7 @@ class HereView(QWidget):
         )
         if same_source_count <= 0:
             return base_x, base_y
-        offset_step = 18.0
+        offset_step = 21.0
         max_x = max(0.0, float(self.scene_size[0]) - target_w)
         max_y = max(0.0, float(self.scene_size[1]) - target_h)
         x = max(0.0, min(max_x, base_x - offset_step * same_source_count))

@@ -87,6 +87,41 @@ class PanelControls(QWidget):
             layout.addWidget(button, 0)
 
 
+class PanelColumn(QWidget):
+    def __init__(self, header: QWidget, controls: QWidget | None, body: QWidget) -> None:
+        super().__init__()
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self._active = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+        layout.addWidget(header, 0)
+        if controls is not None:
+            layout.addWidget(controls, 0)
+        layout.addWidget(body, 1)
+        self.setMinimumWidth(180)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._apply_background()
+
+    def set_active(self, active: bool) -> None:
+        self._active = active
+        self._apply_background()
+
+    def _apply_background(self) -> None:
+        if self._active:
+            self.setStyleSheet(
+                'background:#e8edf4;'
+                'border:1px solid #cfd8e3;'
+                'border-radius:10px;'
+            )
+        else:
+            self.setStyleSheet(
+                'background:#dfe5ec;'
+                'border:1px solid #c7d1dc;'
+                'border-radius:10px;'
+            )
+
+
 class BusyOverlay(QWidget):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -266,7 +301,7 @@ class MainWindow(QMainWindow):
         self.btn_here_add_page.clicked.connect(self._add_here_page)
         self.btn_here_del_page.clicked.connect(self._confirm_delete_here_page)
 
-        self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label, self.btn_close_doc)
+        self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label)
         self.clipboard_header = PanelHeader('CAPTURE BLOCKS', self.clipboard_count_label)
         self.here_header = PanelHeader('HERE', self.here_slots_label)
         self.origin_controls = PanelControls([
@@ -274,6 +309,7 @@ class MainWindow(QMainWindow):
             self.btn_origin_prev_page,
             self.btn_origin_next_page,
             self.btn_origin_next_doc,
+            self.btn_close_doc,
         ])
         self.here_controls = PanelControls([
             self.btn_here_prev_page,
@@ -281,26 +317,16 @@ class MainWindow(QMainWindow):
             self.btn_here_add_page,
             self.btn_here_del_page,
         ])
+        self.origin_panel = PanelColumn(self.origin_header, self.origin_controls, self.origin_view)
+        self.clipboard_panel = PanelColumn(self.clipboard_header, None, self.clipboard_view)
+        self.here_panel = PanelColumn(self.here_header, self.here_controls, self.here_view)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(9)
-        layout.addWidget(self._build_panel_column(self.origin_header, self.origin_controls, self.origin_view), 4)
-        layout.addWidget(self._build_panel_column(self.clipboard_header, None, self.clipboard_view), 3)
-        layout.addWidget(self._build_panel_column(self.here_header, self.here_controls, self.here_view), 4)
+        layout.addWidget(self.origin_panel, 4)
+        layout.addWidget(self.clipboard_panel, 3)
+        layout.addWidget(self.here_panel, 4)
         return layout
-
-    def _build_panel_column(self, header: QWidget, controls: QWidget | None, body: QWidget) -> QWidget:
-        panel = QWidget()
-        panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(6)
-        panel_layout.addWidget(header, 0)
-        if controls is not None:
-            panel_layout.addWidget(controls, 0)
-        panel_layout.addWidget(body, 1)
-        panel.setMinimumWidth(180)
-        panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        return panel
 
     def _snapshot_state(self) -> dict:
         clipboard_items = [
@@ -385,6 +411,9 @@ class MainWindow(QMainWindow):
         self.origin_header.set_active(panel_name == 'origin')
         self.clipboard_header.set_active(panel_name == 'clipboard')
         self.here_header.set_active(panel_name == 'here')
+        self.origin_panel.set_active(panel_name == 'origin')
+        self.clipboard_panel.set_active(panel_name == 'clipboard')
+        self.here_panel.set_active(panel_name == 'here')
 
     def _update_doc_slots(self) -> None:
         total = len(self.loader.loaded_documents)
