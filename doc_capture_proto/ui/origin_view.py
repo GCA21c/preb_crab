@@ -327,8 +327,6 @@ class OriginView(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor('#f6f6f6' if self.active_highlight else '#f4f4f4'))
-        painter.setPen(QPen(QColor('#203a69'), 2))
-        painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
 
         if self.page_image is not None:
             painter.drawImage(self._image_draw_rect(), self.page_image)

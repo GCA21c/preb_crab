@@ -62,7 +62,6 @@ class ImagePreview(QWidget):
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor('#f8f9fb' if self.active_highlight else 'white'))
         painter.setPen(QColor('#203a69'))
-        painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
         painter.drawText(self.rect().adjusted(8, 6, -8, -6), Qt.AlignTop | Qt.AlignLeft, self.title)
         if self.image is None or self.image.isNull():
             return
@@ -90,8 +89,8 @@ class ClipboardView(QWidget):
         self.list_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.status_label = QLabel('BLOCK LIST')
         self.help_frame = QFrame()
-        self.help_frame.setFrameShape(QFrame.Box)
-        self.help_frame.setStyleSheet('QFrame {border:1px solid #8ea3bd; background:#f8fbff;}')
+        self.help_frame.setFrameShape(QFrame.NoFrame)
+        self.help_frame.setStyleSheet('QFrame {border:none; background:#f8fbff;}')
         self.help_scroll = QScrollArea()
         self.help_scroll.setWidgetResizable(True)
         self.help_scroll.setFrameShape(QFrame.NoFrame)
@@ -162,9 +161,9 @@ HERE
             'QListWidget {background:white; border:1px solid #8ea3bd;}'
         )
         self.help_frame.setStyleSheet(
-            'QFrame {border:1px solid #8ea3bd; background:#f9fcff;}'
+            'QFrame {border:none; background:#f9fcff;}'
             if active else
-            'QFrame {border:1px solid #8ea3bd; background:#f8fbff;}'
+            'QFrame {border:none; background:#f8fbff;}'
         )
         self.update()
 
