@@ -34,7 +34,6 @@ class OriginView(QWidget):
         self.middle_panning = False
         self.last_pos = QPointF()
         self.space_pressed = False
-        self.active_highlight = False
         self._live_timer = QTimer(self)
         self._live_timer.setSingleShot(True)
         self._live_timer.setInterval(90)
@@ -51,10 +50,6 @@ class OriginView(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
-
-    def set_active_highlight(self, active: bool) -> None:
-        self.active_highlight = active
-        self.update()
 
     def refresh(self) -> None:
         self._save_current_view_state()
@@ -326,7 +321,7 @@ class OriginView(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor('#f9f9f9' if self.active_highlight else '#f4f4f4'))
+        painter.fillRect(self.rect(), QColor('#f4f4f4'))
 
         if self.page_image is not None:
             painter.drawImage(self._image_draw_rect(), self.page_image)

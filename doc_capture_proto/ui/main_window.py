@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPen
+from PySide6.QtGui import QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -90,7 +90,6 @@ class PanelControls(QWidget):
 class PanelColumn(QWidget):
     def __init__(self, header: QWidget, controls: QWidget | None, body: QWidget) -> None:
         super().__init__()
-        self._active = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
@@ -100,13 +99,6 @@ class PanelColumn(QWidget):
         layout.addWidget(body, 1)
         self.setMinimumWidth(180)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-    def set_active(self, active: bool) -> None:
-        self._active = active
-        self.update()
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
 
 
 class BusyOverlay(QWidget):
@@ -398,12 +390,6 @@ class MainWindow(QMainWindow):
         self.origin_header.set_active(panel_name == 'origin')
         self.clipboard_header.set_active(panel_name == 'clipboard')
         self.here_header.set_active(panel_name == 'here')
-        self.origin_panel.set_active(panel_name == 'origin')
-        self.clipboard_panel.set_active(panel_name == 'clipboard')
-        self.here_panel.set_active(panel_name == 'here')
-        self.origin_view.set_active_highlight(panel_name == 'origin')
-        self.clipboard_view.set_active_highlight(panel_name == 'clipboard')
-        self.here_view.set_active_highlight(panel_name == 'here')
 
     def _update_doc_slots(self) -> None:
         total = len(self.loader.loaded_documents)
