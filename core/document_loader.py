@@ -226,10 +226,7 @@ class DocumentLoader:
                     self._last_hwp_error = 'pyhwpx 객체에 open/Open 메서드가 없습니다.'
                     return None
                 self._notify_progress(f'한글에서 문서 여는 중...\n{src.name}')
-                if hasattr(hwp, 'save_pdf_as_image'):
-                    self._notify_progress(f'PDF로 변환 중...\n{src.name}')
-                    hwp.save_pdf_as_image(str(out_pdf))
-                elif hasattr(hwp, 'save_as'):
+                if hasattr(hwp, 'save_as'):
                     try:
                         self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                         hwp.save_as(path=str(out_pdf), format='PDF')
@@ -238,6 +235,9 @@ class DocumentLoader:
                 elif hasattr(hwp, 'SaveAs'):
                     self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                     hwp.SaveAs(str(out_pdf), 'PDF')
+                elif hasattr(hwp, 'save_pdf_as_image'):
+                    self._notify_progress(f'PDF로 변환 중...\n{src.name}')
+                    hwp.save_pdf_as_image(str(out_pdf))
                 else:
                     self._last_hwp_error = 'pyhwpx 객체에 PDF 저장 메서드가 없습니다.'
                     return None
