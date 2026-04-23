@@ -17,12 +17,17 @@ class ImagePreview(QWidget):
         self.image: QImage | None = None
         self.source_index: int = -1
         self.draggable = draggable
+        self.active_highlight = False
         self._drag_start: QPoint | None = None
         self.setMinimumHeight(200)
 
     def set_image(self, image: QImage | None, source_index: int = -1) -> None:
         self.image = image
         self.source_index = source_index
+        self.update()
+
+    def set_active_highlight(self, active: bool) -> None:
+        self.active_highlight = active
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -55,7 +60,7 @@ class ImagePreview(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor('white'))
+        painter.fillRect(self.rect(), QColor('#f8f9fb' if self.active_highlight else 'white'))
         painter.setPen(QColor('#203a69'))
         painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
         painter.drawText(self.rect().adjusted(8, 6, -8, -6), Qt.AlignTop | Qt.AlignLeft, self.title)
@@ -125,6 +130,7 @@ HERE
         self.help_label.setWordWrap(True)
         self.help_label.setStyleSheet('color:#28435d; padding:8px;')
         self._passive_selection = False
+        self.active_highlight = False
         self.list_widget.currentRowChanged.connect(self._on_row_changed)
         self.list_widget.itemDoubleClicked.connect(self._on_double_clicked)
         self.saved_preview.double_clicked.connect(self._on_saved_preview_double_clicked)
@@ -145,6 +151,22 @@ HERE
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.list_widget.setFocusPolicy(Qt.StrongFocus)
+
+    def set_active_highlight(self, active: bool) -> None:
+        self.active_highlight = active
+        self.live_preview.set_active_highlight(active)
+        self.saved_preview.set_active_highlight(active)
+        self.list_widget.setStyleSheet(
+            'QListWidget {background:#f8f9fb; border:1px solid #8ea3bd;}'
+            if active else
+            'QListWidget {background:white; border:1px solid #8ea3bd;}'
+        )
+        self.help_frame.setStyleSheet(
+            'QFrame {border:1px solid #8ea3bd; background:#f9fcff;}'
+            if active else
+            'QFrame {border:1px solid #8ea3bd; background:#f8fbff;}'
+        )
+        self.update()
 
     def enterEvent(self, event) -> None:
         self.interaction_started.emit('clipboard')

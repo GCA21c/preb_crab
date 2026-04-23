@@ -43,6 +43,7 @@ class HereView(QWidget):
         self.clipboard_blocks: list[dict] = []
         self.paste_serial: int = 0
         self._suppress_modifier_align = False
+        self.active_highlight = False
         self.guide_lines_x: list[float] = []
         self.guide_lines_y: list[float] = []
         self.setMinimumWidth(240)
@@ -52,6 +53,10 @@ class HereView(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAcceptDrops(True)
         self.temp_dir = Path(tempfile.mkdtemp(prefix='doc_capture_here_'))
+
+    def set_active_highlight(self, active: bool) -> None:
+        self.active_highlight = active
+        self.update()
 
     @property
     def blocks(self) -> list[dict]:
@@ -767,7 +772,7 @@ class HereView(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor('#efefef'))
+        painter.fillRect(self.rect(), QColor('#f1f1f1' if self.active_highlight else '#efefef'))
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
         page_rect = self._page_rect_view()

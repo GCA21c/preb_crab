@@ -106,14 +106,6 @@ class PanelColumn(QWidget):
         self.update()
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        rect = self.rect().adjusted(0, 0, -1, -1)
-        fill = QColor('#d8e0e8') if self._active else QColor('#cfd7e0')
-        border = QColor('#bcc7d2') if self._active else QColor('#b4c0cc')
-        painter.setPen(QPen(border, 1))
-        painter.setBrush(fill)
-        painter.drawRoundedRect(rect, 10, 10)
         super().paintEvent(event)
 
 
@@ -409,6 +401,9 @@ class MainWindow(QMainWindow):
         self.origin_panel.set_active(panel_name == 'origin')
         self.clipboard_panel.set_active(panel_name == 'clipboard')
         self.here_panel.set_active(panel_name == 'here')
+        self.origin_view.set_active_highlight(panel_name == 'origin')
+        self.clipboard_view.set_active_highlight(panel_name == 'clipboard')
+        self.here_view.set_active_highlight(panel_name == 'here')
 
     def _update_doc_slots(self) -> None:
         total = len(self.loader.loaded_documents)
