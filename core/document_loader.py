@@ -226,20 +226,56 @@ class DocumentLoader:
                     self._last_hwp_error = 'pyhwpx 객체에 open/Open 메서드가 없습니다.'
                     return None
                 self._notify_progress(f'한글에서 문서 여는 중...\n{src.name}')
-                if hasattr(hwp, 'save_as'):
+                ext = src.suffix.lower()
+                method_errors: list[str] = []
+
+                def try_save_as() -> bool:
+                    if not hasattr(hwp, 'save_as'):
+                        return False
+                    self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                     try:
-                        self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                         hwp.save_as(path=str(out_pdf), format='PDF')
                     except TypeError:
                         hwp.save_as(str(out_pdf), format='PDF')
-                elif hasattr(hwp, 'SaveAs'):
+                    return True
+
+                def try_SaveAs() -> bool:
+                    if not hasattr(hwp, 'SaveAs'):
+                        return False
                     self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                     hwp.SaveAs(str(out_pdf), 'PDF')
-                elif hasattr(hwp, 'save_pdf_as_image'):
+                    return True
+
+                def try_save_pdf_as_image() -> bool:
+                    if not hasattr(hwp, 'save_pdf_as_image'):
+                        return False
                     self._notify_progress(f'PDF로 변환 중...\n{src.name}')
                     hwp.save_pdf_as_image(str(out_pdf))
-                else:
-                    self._last_hwp_error = 'pyhwpx 객체에 PDF 저장 메서드가 없습니다.'
+                    return True
+
+                save_attempts = (
+                    [try_save_pdf_as_image, try_save_as, try_SaveAs]
+                    if ext == '.hwp'
+                    else [try_save_as, try_SaveAs, try_save_pdf_as_image]
+                )
+
+                save_succeeded = False
+                for attempt in save_attempts:
+                    try:
+                        if not attempt():
+                            continue
+                        save_succeeded = True
+                        break
+                    except Exception as save_exc:
+                        method_errors.append(str(save_exc).strip())
+                        try:
+                            if out_pdf.exists():
+                                out_pdf.unlink()
+                        except Exception:
+                            pass
+
+                if not save_succeeded:
+                    self._last_hwp_error = method_errors[-1] if method_errors else 'pyhwpx 객체에 PDF 저장 메서드가 없습니다.'
                     return None
             logs_text = (capture_out.getvalue() + '\n' + capture_err.getvalue()).strip()
             if out_pdf.exists() and out_pdf.stat().st_size > 0:
