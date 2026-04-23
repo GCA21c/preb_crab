@@ -83,6 +83,11 @@ class DocumentLoader:
         elif ext in {'.doc', '.docx'}:
             self._notify_progress(f'Word 문서 준비 중...\n{src.name}')
             loaded = self._open_word_family(src)
+        elif ext in {'.hwp', '.hwpx'}:
+            raise RuntimeError(
+                'HWP/HWPX는 현재 내부 렌더 엔진 재구현 단계입니다.\n'
+                '이 브랜치에서는 오리지널 한글/외부 브리지를 사용하지 않습니다.'
+            )
         else:
             raise ValueError(f'지원하지 않는 형식입니다: {ext}')
 
