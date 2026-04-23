@@ -161,7 +161,7 @@ class BusyOverlay(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle('Prep_Crab™ ver 0.1')
+        self.setWindowTitle('Prep_Crab™ Ver 1.0')
         icon_path = Path(__file__).resolve().parents[1] / 'resources' / 'app_icon.ico'
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
