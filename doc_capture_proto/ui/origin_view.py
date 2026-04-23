@@ -48,6 +48,9 @@ class OriginView(QWidget):
     def refresh(self) -> None:
         self.page_image = self.loader.render_current_page(scale=self.render_scale)
         self._reset_pan_if_needed()
+        if self.page_image is None:
+            self._live_timer.stop()
+            self.live_preview_changed.emit(None)
         self._schedule_live_preview(immediate=True)
         self.update()
 

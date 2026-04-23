@@ -77,13 +77,13 @@ class ClipboardView(QWidget):
     def __init__(self, store: ClipboardStore) -> None:
         super().__init__()
         self.store = store
-        self.live_preview = ImagePreview('LIVE VIEW')
-        self.saved_preview = ImagePreview('SELECTED', draggable=True)
+        self.live_preview = ImagePreview('CURRENT VIEW')
+        self.saved_preview = ImagePreview('CAPTURE BLOCK', draggable=True)
         self.list_widget = QListWidget()
         self.list_widget.setVerticalScrollMode(QListWidget.ScrollPerPixel)
-        self.list_widget.setMinimumHeight(260)
+        self.list_widget.setMinimumHeight(175)
         self.list_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.status_label = QLabel('캡쳐 전에는 LIVE VIEW, 저장 후에는 SELECTED에서 확인')
+        self.status_label = QLabel('BLOCK LIST')
         self.help_frame = QFrame()
         self.help_frame.setFrameShape(QFrame.Box)
         self.help_frame.setStyleSheet('QFrame {border:1px solid #8ea3bd; background:#f8fbff;}')
@@ -92,7 +92,7 @@ class ClipboardView(QWidget):
         self.help_scroll.setFrameShape(QFrame.NoFrame)
         self.help_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.help_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.help_scroll.setFixedHeight(110)
+        self.help_scroll.setFixedHeight(195)
         self.help_label = QLabel(
             """HELP
 ORIGIN

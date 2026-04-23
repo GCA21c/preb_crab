@@ -26,11 +26,11 @@ from doc_capture_proto.ui.origin_view import OriginView
 
 
 class LampLabel(QWidget):
-    def __init__(self, title: str, left_padding: int = 0) -> None:
+    def __init__(self, title: str) -> None:
         super().__init__()
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(left_padding, 0, 0, 0)
-        self.layout.setSpacing(6)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(12)
         self.lamp = QLabel('●')
         self.text = QLabel(title)
         font = self.text.font()
@@ -48,6 +48,24 @@ class LampLabel(QWidget):
         else:
             self.lamp.setStyleSheet('color:#9aa3ad; font-size:16px;')
             self.text.setStyleSheet('color:#c8d0d8;')
+
+
+class PanelHeader(QWidget):
+    def __init__(self, title: str, info_label: QLabel | None = None, trailing_widget: QWidget | None = None) -> None:
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        self.title_label = LampLabel(title)
+        layout.addWidget(self.title_label, 0)
+        if info_label is not None:
+            layout.addWidget(info_label, 0)
+        if trailing_widget is not None:
+            layout.addWidget(trailing_widget, 0)
+        layout.addStretch(1)
+
+    def set_active(self, active: bool) -> None:
+        self.title_label.set_active(active)
 
 
 class MainWindow(QMainWindow):
@@ -105,7 +123,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
         root.addLayout(self._build_top_buttons())
-        root.addLayout(self._build_titles())
         root.addLayout(self._build_content())
         self._set_active_panel('origin')
         self._update_doc_slots()
@@ -148,32 +165,26 @@ class MainWindow(QMainWindow):
         self.btn_load_set.clicked.connect(self._load_project)
         return layout
 
-    def _build_titles(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(9)
-        self.origin_title = LampLabel('ORIGIN')
-        self.clipboard_title = LampLabel('CLIPBOARD', left_padding=6)
-        self.here_title = LampLabel('HERE', left_padding=-28)
-        self.origin_title.layout.insertWidget(2, self.doc_slots_label)
-        self.origin_title.layout.addWidget(self.btn_close_doc)
-        self.clipboard_count_label.setContentsMargins(12, 0, 0, 0)
-        self.clipboard_title.layout.insertWidget(2, self.clipboard_count_label)
-        self.here_slots_label.setContentsMargins(0, 0, 0, 0)
-        self.here_title.layout.insertWidget(2, self.here_slots_label)
-        layout.addWidget(self.origin_title, 4)
-        layout.addWidget(self.clipboard_title, 3)
-        layout.addWidget(self.here_title, 4)
-        return layout
-
     def _build_content(self):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(9)
-        layout.addWidget(self.origin_view, 4)
-        layout.addWidget(self.clipboard_view, 3)
-        layout.addWidget(self.here_view, 4)
+        self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label, self.btn_close_doc)
+        self.clipboard_header = PanelHeader('CAPTURE BLOCKS', self.clipboard_count_label)
+        self.here_header = PanelHeader('HERE', self.here_slots_label)
+        layout.addWidget(self._build_panel_column(self.origin_header, self.origin_view), 4)
+        layout.addWidget(self._build_panel_column(self.clipboard_header, self.clipboard_view), 3)
+        layout.addWidget(self._build_panel_column(self.here_header, self.here_view), 4)
         return layout
+
+    def _build_panel_column(self, header: QWidget, body: QWidget) -> QWidget:
+        panel = QWidget()
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(6)
+        panel_layout.addWidget(header, 0)
+        panel_layout.addWidget(body, 1)
+        return panel
 
     def _snapshot_state(self) -> dict:
         clipboard_items = [
@@ -255,9 +266,9 @@ class MainWindow(QMainWindow):
 
     def _set_active_panel(self, panel_name: str) -> None:
         self.active_panel = panel_name
-        self.origin_title.set_active(panel_name == 'origin')
-        self.clipboard_title.set_active(panel_name == 'clipboard')
-        self.here_title.set_active(panel_name == 'here')
+        self.origin_header.set_active(panel_name == 'origin')
+        self.clipboard_header.set_active(panel_name == 'clipboard')
+        self.here_header.set_active(panel_name == 'here')
 
     def _update_doc_slots(self) -> None:
         total = len(self.loader.loaded_documents)
@@ -405,6 +416,8 @@ class MainWindow(QMainWindow):
     def _close_current_doc(self) -> None:
         if self.loader.close_current_document():
             self.origin_view.refresh()
+            if not self.loader.has_document():
+                self.clipboard_view.set_live_preview(None)
             self._update_doc_slots()
 
     def _prev_doc(self) -> None:
@@ -491,6 +504,7 @@ class MainWindow(QMainWindow):
         self.clipboard_view.reload_from_store()
         self._update_clipboard_count()
         self.origin_view.page_image = None
+        self.clipboard_view.set_live_preview(None)
         self.origin_view.update()
         self.here_view.restore_pages([[]])
         self.undo_stack.clear()
