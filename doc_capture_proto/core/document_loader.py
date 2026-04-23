@@ -279,6 +279,7 @@ class DocumentLoader:
         try:
             with zipfile.ZipFile(src, 'r') as zf:
                 data = zf.read('word/document.xml')
+                footer_data = zf.read('word/footer1.xml') if 'word/footer1.xml' in zf.namelist() else b''
         except Exception:
             return []
         try:
@@ -287,11 +288,20 @@ class DocumentLoader:
             return []
 
         ns_uri = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+        v_ns_uri = 'urn:schemas-microsoft-com:vml'
         body = root.find(f'{{{ns_uri}}}body')
         if body is None:
             return []
 
         pages: list[list[dict]] = [[]]
+        header_blocks = self._extract_docx_textboxes(root, ns_uri, v_ns_uri)
+        footer_blocks: list[str] = []
+        if footer_data:
+            try:
+                footer_root = ET.fromstring(footer_data)
+                footer_blocks = self._extract_docx_textboxes(footer_root, ns_uri, v_ns_uri)
+            except Exception:
+                footer_blocks = []
 
         def append_paragraph(text: str, style: str = '', align: str = 'left') -> None:
             cleaned = text.strip()
@@ -391,7 +401,39 @@ class DocumentLoader:
                     })
 
         normalized = [page for page in pages if page]
+        if header_blocks:
+            for page in normalized:
+                for text in reversed(header_blocks):
+                    page.insert(0, {
+                        'type': 'textbox',
+                        'text': text,
+                        'anchor': 'top',
+                    })
+        if footer_blocks:
+            footer_text = footer_blocks[0]
+            for page_index, page in enumerate(normalized, start=1):
+                page.append({
+                    'type': 'textbox',
+                    'text': re.sub(r'\b\d+\b', str(page_index), footer_text) if re.search(r'\b\d+\b', footer_text) else f'{footer_text} {page_index}',
+                    'anchor': 'bottom',
+                })
         return normalized
+
+    def _extract_docx_textboxes(self, root: ET.Element, ns_uri: str, v_ns_uri: str) -> list[str]:
+        blocks: list[str] = []
+        for shape in root.findall(f'.//{{{v_ns_uri}}}shape'):
+            texts = [t.text for t in shape.findall(f'.//{{{ns_uri}}}t') if t.text and t.text.strip()]
+            if texts:
+                block = '\n'.join(texts).strip()
+                if block and block not in blocks:
+                    blocks.append(block)
+        for textbox in root.findall(f'.//{{{ns_uri}}}txbxContent'):
+            texts = [t.text for t in textbox.findall(f'.//{{{ns_uri}}}t') if t.text and t.text.strip()]
+            if texts:
+                block = '\n'.join(texts).strip()
+                if block and block not in blocks:
+                    blocks.append(block)
+        return blocks
 
     def _extract_docx_page_texts(self, src: Path) -> list[str]:
         layouts = self._extract_docx_page_layouts(src)
@@ -806,6 +848,29 @@ class DocumentLoader:
                         painter.drawText(final_rect.adjusted(6, 6, -6, -6), int(Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop), text)
                     content_y += row_h
                 content_y += 18.0
+            elif elem_type == 'textbox':
+                text = elem.get('text', '')
+                anchor = elem.get('anchor', 'top')
+                painter.setFont(body_font)
+                metrics = painter.fontMetrics()
+                flags = int(Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop)
+                if anchor == 'top':
+                    probe = metrics.boundingRect(QRectF(content_x, content_y, content_w, content_h).toRect(), flags, text)
+                    draw_h = max(float(probe.height()), float(metrics.height()))
+                    box_rect = QRectF(content_x, content_y, content_w * 0.42, draw_h + 12.0)
+                    painter.setPen(QColor('#6f6f6f'))
+                    painter.drawRect(box_rect)
+                    painter.setPen(QColor(Qt.black))
+                    painter.drawText(box_rect.adjusted(6, 6, -6, -6), flags, text)
+                    content_y += draw_h + 18.0
+                else:
+                    probe = metrics.boundingRect(QRectF(content_x, content_y, content_w, content_h).toRect(), flags, text)
+                    draw_h = max(float(probe.height()), float(metrics.height()))
+                    box_rect = QRectF(content_x, float(page_size[1] - margin) - draw_h - 14.0, content_w * 0.22, draw_h + 10.0)
+                    painter.setPen(QColor('#8a8a8a'))
+                    painter.drawRect(box_rect)
+                    painter.setPen(QColor(Qt.black))
+                    painter.drawText(box_rect.adjusted(4, 4, -4, -4), flags, text)
 
         painter.end()
         return image
