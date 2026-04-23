@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -122,8 +123,10 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
+        root.setContentsMargins(9, 9, 9, 9)
+        root.setSpacing(8)
         root.addLayout(self._build_top_buttons())
-        root.addLayout(self._build_content())
+        root.addWidget(self._build_content(), 1)
         self._set_active_panel('origin')
         self._update_doc_slots()
         self._update_clipboard_count()
@@ -165,17 +168,21 @@ class MainWindow(QMainWindow):
         self.btn_load_set.clicked.connect(self._load_project)
         return layout
 
-    def _build_content(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(9)
+    def _build_content(self) -> QSplitter:
         self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label, self.btn_close_doc)
         self.clipboard_header = PanelHeader('CAPTURE BLOCKS', self.clipboard_count_label)
         self.here_header = PanelHeader('HERE', self.here_slots_label)
-        layout.addWidget(self._build_panel_column(self.origin_header, self.origin_view), 4)
-        layout.addWidget(self._build_panel_column(self.clipboard_header, self.clipboard_view), 3)
-        layout.addWidget(self._build_panel_column(self.here_header, self.here_view), 4)
-        return layout
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(8)
+        splitter.addWidget(self._build_panel_column(self.origin_header, self.origin_view))
+        splitter.addWidget(self._build_panel_column(self.clipboard_header, self.clipboard_view))
+        splitter.addWidget(self._build_panel_column(self.here_header, self.here_view))
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(2, 4)
+        splitter.setSizes([580, 420, 580])
+        return splitter
 
     def _build_panel_column(self, header: QWidget, body: QWidget) -> QWidget:
         panel = QWidget()
@@ -184,6 +191,7 @@ class MainWindow(QMainWindow):
         panel_layout.setSpacing(6)
         panel_layout.addWidget(header, 0)
         panel_layout.addWidget(body, 1)
+        panel.setMinimumWidth(220)
         return panel
 
     def _snapshot_state(self) -> dict:
