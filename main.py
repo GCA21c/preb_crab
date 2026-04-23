@@ -19,12 +19,8 @@ def run():
 
 
 if __name__ == "__main__":
-    print("[INFO] main.py start")
     try:
-        code = run()
-        print(f"[INFO] app exit code = {code}")
+        raise SystemExit(run())
     except Exception:
-        print("\n[FATAL ERROR]")
         traceback.print_exc()
-    finally:
-        input("\n엔터 누르기 전까지 안 닫힘 > ")
+        raise SystemExit(1)
