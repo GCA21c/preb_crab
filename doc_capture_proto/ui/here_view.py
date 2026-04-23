@@ -339,6 +339,10 @@ class HereView(QWidget):
             return
         history.append(current)
 
+    def _push_size_history_for_selection(self) -> None:
+        for idx in self._selected_indices_sorted():
+            self._push_size_history(self.blocks[idx])
+
     def _restore_previous_size(self, block: dict) -> bool:
         history = block.setdefault('size_history', [])
         if history:
@@ -452,11 +456,13 @@ class HereView(QWidget):
                 if ctrl_pressed:
                     self.selected_indices.add(i)
                     self.selected_index = i
-                elif i not in self.selected_indices or len(self.selected_indices) != 1:
+                elif i in self.selected_indices:
+                    self.selected_index = i
+                else:
                     self._set_single_selection(i)
                 self.resizing_block = True
                 self.resize_mode = handle
-                self._push_size_history(block)
+                self._push_size_history_for_selection()
                 self.history_checkpoint_requested.emit()
                 if handle == 'right':
                     self.setCursor(Qt.SizeHorCursor)
@@ -472,7 +478,9 @@ class HereView(QWidget):
                     self._toggle_selection(i)
                     self.dragging_block = False
                 else:
-                    if i not in self.selected_indices or len(self.selected_indices) != 1:
+                    if i in self.selected_indices:
+                        self.selected_index = i
+                    else:
                         self._set_single_selection(i)
                     self.dragging_block = True
                     self.history_checkpoint_requested.emit()
@@ -498,10 +506,17 @@ class HereView(QWidget):
         block = self.blocks[self.selected_index]
         if self.resizing_block and (event.buttons() & Qt.LeftButton):
             min_size = 24.0
+            selected_indices = self._selected_indices_sorted()
             if self.resize_mode == 'right':
-                block['w'] = max(min_size, float(block['w']) + delta.x() / self.zoom)
+                delta_w = delta.x() / self.zoom
+                for idx in selected_indices:
+                    target = self.blocks[idx]
+                    target['w'] = max(min_size, float(target['w']) + delta_w)
             elif self.resize_mode == 'bottom':
-                block['h'] = max(min_size, float(block['h']) + delta.y() / self.zoom)
+                delta_h = delta.y() / self.zoom
+                for idx in selected_indices:
+                    target = self.blocks[idx]
+                    target['h'] = max(min_size, float(target['h']) + delta_h)
             else:
                 original_w = max(1.0, float(block.get('original_w', block['image'].width())))
                 original_h = max(1.0, float(block.get('original_h', block['image'].height())))
@@ -525,8 +540,12 @@ class HereView(QWidget):
                 if target_h < min_size:
                     target_h = min_size
                     target_w = max(min_size, target_h / aspect_ratio)
-                block['w'] = target_w
-                block['h'] = target_h
+                scale_w = target_w / current_w if current_w else 1.0
+                scale_h = target_h / current_h if current_h else 1.0
+                for idx in selected_indices:
+                    target = self.blocks[idx]
+                    target['w'] = max(min_size, float(target['w']) * scale_w)
+                    target['h'] = max(min_size, float(target['h']) * scale_h)
             self.drag_last = pos
             self.update()
             return

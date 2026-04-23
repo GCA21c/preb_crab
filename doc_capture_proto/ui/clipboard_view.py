@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QMimeData, QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QDrag, QImage, QMouseEvent, QPainter, QPixmap
-from PySide6.QtWidgets import QFrame, QInputDialog, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QInputDialog, QLabel, QListWidget, QListWidgetItem, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 from doc_capture_proto.core.clipboard_store import ClipboardItem, ClipboardStore
 
@@ -81,11 +81,18 @@ class ClipboardView(QWidget):
         self.saved_preview = ImagePreview('SELECTED', draggable=True)
         self.list_widget = QListWidget()
         self.list_widget.setVerticalScrollMode(QListWidget.ScrollPerPixel)
-        self.list_widget.setMaximumHeight(150)
+        self.list_widget.setMinimumHeight(260)
+        self.list_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.status_label = QLabel('캡쳐 전에는 LIVE VIEW, 저장 후에는 SELECTED에서 확인')
         self.help_frame = QFrame()
         self.help_frame.setFrameShape(QFrame.Box)
         self.help_frame.setStyleSheet('QFrame {border:1px solid #8ea3bd; background:#f8fbff;}')
+        self.help_scroll = QScrollArea()
+        self.help_scroll.setWidgetResizable(True)
+        self.help_scroll.setFrameShape(QFrame.NoFrame)
+        self.help_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.help_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.help_scroll.setFixedHeight(110)
         self.help_label = QLabel(
             """HELP
 ORIGIN
@@ -120,17 +127,19 @@ HERE
         self._passive_selection = False
         self.list_widget.currentRowChanged.connect(self._on_row_changed)
         self.list_widget.itemDoubleClicked.connect(self._on_double_clicked)
+        self.saved_preview.double_clicked.connect(self._on_saved_preview_double_clicked)
         self.list_widget.installEventFilter(self)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.live_preview)
         layout.addWidget(self.saved_preview)
         layout.addWidget(self.status_label)
-        layout.addWidget(self.list_widget)
+        layout.addWidget(self.list_widget, 1)
         help_layout = QVBoxLayout(self.help_frame)
         help_layout.setContentsMargins(0, 0, 0, 0)
         help_layout.addWidget(self.help_label)
-        layout.addWidget(self.help_frame)
+        self.help_scroll.setWidget(self.help_frame)
+        layout.addWidget(self.help_scroll, 0)
         self.setMinimumWidth(280)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -237,3 +246,8 @@ HERE
         self.interaction_started.emit('clipboard')
         row = self.list_widget.row(item)
         self._open_rename_dialog(row)
+
+    def _on_saved_preview_double_clicked(self, image: QImage, row: int) -> None:
+        self.interaction_started.emit('clipboard')
+        self.store.set_current(row)
+        self.send_to_here.emit(image, row)
