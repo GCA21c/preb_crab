@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from doc_capture_proto.core.capture_utils import find_content_bounds
 
@@ -45,7 +45,9 @@ class HereView(QWidget):
         self._suppress_modifier_align = False
         self.guide_lines_x: list[float] = []
         self.guide_lines_y: list[float] = []
-        self.setMinimumSize(420, 500)
+        self.setMinimumWidth(240)
+        self.setMinimumHeight(500)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAcceptDrops(True)

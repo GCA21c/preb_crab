@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from doc_capture_proto.core.capture_utils import maybe_trim
 from doc_capture_proto.core.document_loader import DocumentLoader
@@ -41,7 +41,9 @@ class OriginView(QWidget):
         self._flash_on = False
         self._capture_revision = 0
         self._last_captured_revision = -1
-        self.setMinimumSize(420, 500)
+        self.setMinimumWidth(240)
+        self.setMinimumHeight(500)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
 

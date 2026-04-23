@@ -191,7 +191,8 @@ class MainWindow(QMainWindow):
         panel_layout.setSpacing(6)
         panel_layout.addWidget(header, 0)
         panel_layout.addWidget(body, 1)
-        panel.setMinimumWidth(220)
+        panel.setMinimumWidth(180)
+        panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         return panel
 
     def _snapshot_state(self) -> dict:
