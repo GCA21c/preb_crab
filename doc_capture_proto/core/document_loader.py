@@ -295,7 +295,7 @@ class DocumentLoader:
 
         pages: list[list[dict]] = [[]]
         header_blocks = self._extract_docx_textboxes(root, ns_uri, v_ns_uri)
-        footer_blocks: list[str] = []
+        footer_blocks: list[dict] = []
         if footer_data:
             try:
                 footer_root = ET.fromstring(footer_data)
@@ -403,37 +403,97 @@ class DocumentLoader:
         normalized = [page for page in pages if page]
         if header_blocks:
             for page in normalized:
-                for text in reversed(header_blocks):
-                    page.insert(0, {
-                        'type': 'textbox',
-                        'text': text,
-                        'anchor': 'top',
-                    })
+                for box in reversed(header_blocks):
+                    page.insert(0, dict(box))
         if footer_blocks:
-            footer_text = footer_blocks[0]
             for page_index, page in enumerate(normalized, start=1):
-                page.append({
-                    'type': 'textbox',
-                    'text': re.sub(r'\b\d+\b', str(page_index), footer_text) if re.search(r'\b\d+\b', footer_text) else f'{footer_text} {page_index}',
-                    'anchor': 'bottom',
-                })
+                for box in footer_blocks:
+                    box_copy = dict(box)
+                    text = str(box_copy.get('text', ''))
+                    box_copy['text'] = re.sub(r'\b\d+\b', str(page_index), text) if re.search(r'\b\d+\b', text) else (f'{text} {page_index}'.strip() if text else str(page_index))
+                    page.append(box_copy)
         return normalized
 
-    def _extract_docx_textboxes(self, root: ET.Element, ns_uri: str, v_ns_uri: str) -> list[str]:
-        blocks: list[str] = []
+    def _extract_docx_textboxes(self, root: ET.Element, ns_uri: str, v_ns_uri: str) -> list[dict]:
+        blocks: list[dict] = []
+        seen: set[tuple] = set()
         for shape in root.findall(f'.//{{{v_ns_uri}}}shape'):
             texts = [t.text for t in shape.findall(f'.//{{{ns_uri}}}t') if t.text and t.text.strip()]
             if texts:
-                block = '\n'.join(texts).strip()
-                if block and block not in blocks:
-                    blocks.append(block)
+                block_text = '\n'.join(texts).strip()
+                if block_text:
+                    box = self._docx_shape_to_box(shape, block_text)
+                    key = (
+                        box.get('text', ''),
+                        round(float(box.get('x_pt', 0.0)), 2),
+                        round(float(box.get('y_pt', 0.0)), 2),
+                        round(float(box.get('w_pt', 0.0)), 2),
+                        round(float(box.get('h_pt', 0.0)), 2),
+                        box.get('anchor', 'top'),
+                    )
+                    if key not in seen:
+                        blocks.append(box)
+                        seen.add(key)
         for textbox in root.findall(f'.//{{{ns_uri}}}txbxContent'):
             texts = [t.text for t in textbox.findall(f'.//{{{ns_uri}}}t') if t.text and t.text.strip()]
             if texts:
-                block = '\n'.join(texts).strip()
-                if block and block not in blocks:
-                    blocks.append(block)
+                block_text = '\n'.join(texts).strip()
+                if block_text:
+                    key = (block_text, 'txbx')
+                    if key not in seen:
+                        blocks.append({
+                            'type': 'textbox',
+                            'text': block_text,
+                            'anchor': 'top',
+                            'x_pt': 0.0,
+                            'y_pt': 0.0,
+                            'w_pt': 150.0,
+                            'h_pt': 80.0,
+                        })
+                        seen.add(key)
         return blocks
+
+    def _docx_shape_to_box(self, shape: ET.Element, text: str) -> dict:
+        style = shape.attrib.get('style', '')
+        style_map = {}
+        for part in style.split(';'):
+            if ':' not in part:
+                continue
+            key, value = part.split(':', 1)
+            style_map[key.strip().lower()] = value.strip().lower()
+
+        def parse_measure(value: str, default: float = 0.0) -> float:
+            if not value:
+                return default
+            raw = value.strip().lower()
+            try:
+                if raw.endswith('pt'):
+                    return float(raw[:-2])
+                if raw.endswith('px'):
+                    return float(raw[:-2]) * 0.75
+                if raw.endswith('in'):
+                    return float(raw[:-2]) * 72.0
+                if raw.endswith('cm'):
+                    return float(raw[:-2]) * 28.3464567
+                if raw.endswith('mm'):
+                    return float(raw[:-2]) * 2.83464567
+                return float(raw) / 127.0
+            except Exception:
+                return default
+
+        anchor = 'bottom' if (
+            style_map.get('mso-position-vertical', '') == 'bottom'
+            or style_map.get('v-text-anchor', '') == 'bottom'
+        ) else 'top'
+        return {
+            'type': 'textbox',
+            'text': text,
+            'anchor': anchor,
+            'x_pt': parse_measure(style_map.get('margin-left', '0')),
+            'y_pt': parse_measure(style_map.get('top', style_map.get('margin-top', '0'))),
+            'w_pt': parse_measure(style_map.get('width', '150pt'), 150.0),
+            'h_pt': parse_measure(style_map.get('height', '80pt'), 80.0),
+        }
 
     def _extract_docx_page_texts(self, src: Path) -> list[str]:
         layouts = self._extract_docx_page_layouts(src)
@@ -854,23 +914,22 @@ class DocumentLoader:
                 painter.setFont(body_font)
                 metrics = painter.fontMetrics()
                 flags = int(Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop)
-                if anchor == 'top':
-                    probe = metrics.boundingRect(QRectF(content_x, content_y, content_w, content_h).toRect(), flags, text)
-                    draw_h = max(float(probe.height()), float(metrics.height()))
-                    box_rect = QRectF(content_x, content_y, content_w * 0.42, draw_h + 12.0)
-                    painter.setPen(QColor('#6f6f6f'))
-                    painter.drawRect(box_rect)
-                    painter.setPen(QColor(Qt.black))
-                    painter.drawText(box_rect.adjusted(6, 6, -6, -6), flags, text)
-                    content_y += draw_h + 18.0
+                pt_to_px_x = float(page_size[0]) / 595.0
+                pt_to_px_y = float(page_size[1]) / 842.0
+                x = content_x + float(elem.get('x_pt', 0.0)) * pt_to_px_x
+                box_w = max(120.0, float(elem.get('w_pt', 150.0)) * pt_to_px_x)
+                box_h = max(36.0, float(elem.get('h_pt', 80.0)) * pt_to_px_y)
+                if anchor == 'bottom':
+                    y = float(page_size[1] - margin) - box_h - float(elem.get('y_pt', 0.0)) * pt_to_px_y
                 else:
-                    probe = metrics.boundingRect(QRectF(content_x, content_y, content_w, content_h).toRect(), flags, text)
-                    draw_h = max(float(probe.height()), float(metrics.height()))
-                    box_rect = QRectF(content_x, float(page_size[1] - margin) - draw_h - 14.0, content_w * 0.22, draw_h + 10.0)
-                    painter.setPen(QColor('#8a8a8a'))
-                    painter.drawRect(box_rect)
-                    painter.setPen(QColor(Qt.black))
-                    painter.drawText(box_rect.adjusted(4, 4, -4, -4), flags, text)
+                    y = content_y + float(elem.get('y_pt', 0.0)) * pt_to_px_y
+                box_rect = QRectF(x, y, min(box_w, content_x + content_w - x), box_h)
+                painter.setPen(QColor('#6f6f6f' if anchor == 'top' else '#8a8a8a'))
+                painter.drawRect(box_rect)
+                painter.setPen(QColor(Qt.black))
+                painter.drawText(box_rect.adjusted(6, 6, -6, -6), flags, text)
+                if anchor == 'top':
+                    content_y = max(content_y, y + box_h + 10.0)
 
         painter.end()
         return image
