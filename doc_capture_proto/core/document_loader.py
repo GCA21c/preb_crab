@@ -12,7 +12,7 @@ from typing import Optional
 
 import fitz
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QFont, QImage, QPainter, QTextDocument, QTextOption
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QTextDocument, QTextOption
 from PySide6.QtWidgets import QFileDialog, QWidget
 
 
@@ -659,10 +659,12 @@ class DocumentLoader:
         image = QImage(page_size[0], page_size[1], QImage.Format_ARGB32)
         image.fill(Qt.white)
         painter = QPainter(image)
+        painter.setPen(QColor(Qt.black))
         doc = QTextDocument()
         font = QFont('Malgun Gothic')
         font.setPointSize(12)
         doc.setDefaultFont(font)
+        doc.setDefaultStyleSheet('body { color: #000000; } p { color: #000000; }')
         option = QTextOption()
         option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
         doc.setDefaultTextOption(option)
