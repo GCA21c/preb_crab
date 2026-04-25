@@ -1188,6 +1188,8 @@ class HereView(QWidget):
 
     def _paint_drawings(self, painter: QPainter) -> None:
         for i, drawing in enumerate(self.drawings):
+            if self.text_editor is not None and i == self.text_editor_index:
+                continue
             selected = self.drawing_enabled and i in self._selected_drawing_indices_sorted()
             if drawing.get('type') == 'textbox':
                 self._paint_textbox(painter, drawing, selected=selected)
