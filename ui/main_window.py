@@ -12,7 +12,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QDoubleSpinBox,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -204,6 +206,7 @@ class MainWindow(QMainWindow):
         self.here_view.delete_requested.connect(self._delete_here_block_index)
         self.here_view.history_checkpoint_requested.connect(self._push_undo_state)
         self.here_view.duplicate_to_clipboard_requested.connect(self._duplicate_here_selection)
+        self.here_view.undo_requested.connect(self._undo)
 
         self.origin_view.interaction_started.connect(self._set_active_panel)
         self.clipboard_view.interaction_started.connect(self._set_active_panel)
@@ -289,6 +292,34 @@ class MainWindow(QMainWindow):
         self.btn_here_reset_view.clicked.connect(self._reset_here_view)
         self.btn_here_del_page.clicked.connect(self._confirm_delete_here_page)
 
+        self.btn_draw_toggle = QPushButton('DRAW')
+        self.btn_draw_toggle.setCheckable(True)
+        self.btn_draw_toggle.setFixedWidth(48)
+        self.btn_draw_hline = QPushButton('─')
+        self.btn_draw_vline = QPushButton('│')
+        self.btn_draw_box = QPushButton('BOX')
+        for button in (self.btn_draw_hline, self.btn_draw_vline, self.btn_draw_box):
+            button.setCheckable(True)
+            button.setFixedWidth(38)
+        self.btn_draw_hline.setChecked(True)
+        self.draw_line_width = QDoubleSpinBox()
+        self.draw_line_width.setRange(0.1, 3.0)
+        self.draw_line_width.setSingleStep(0.1)
+        self.draw_line_width.setValue(0.5)
+        self.draw_line_width.setSuffix('pt')
+        self.draw_line_width.setFixedWidth(72)
+        self.draw_text_size = QSpinBox()
+        self.draw_text_size.setRange(6, 72)
+        self.draw_text_size.setValue(14)
+        self.draw_text_size.setSuffix('pt')
+        self.draw_text_size.setFixedWidth(70)
+        self.btn_draw_toggle.toggled.connect(self.here_view.set_drawing_enabled)
+        self.btn_draw_hline.clicked.connect(lambda: self._set_here_drawing_tool('hline'))
+        self.btn_draw_vline.clicked.connect(lambda: self._set_here_drawing_tool('vline'))
+        self.btn_draw_box.clicked.connect(lambda: self._set_here_drawing_tool('textbox'))
+        self.draw_line_width.valueChanged.connect(self.here_view.set_drawing_line_width)
+        self.draw_text_size.valueChanged.connect(self.here_view.set_drawing_text_size)
+
         self.origin_header = PanelHeader('ORIGIN', self.doc_slots_label)
         self.clipboard_header = PanelHeader('CAPTURE BLOCKS', self.clipboard_count_label)
         self.here_header = PanelHeader('HERE', self.here_slots_label)
@@ -300,13 +331,32 @@ class MainWindow(QMainWindow):
             self.btn_origin_reset_view,
             self.btn_close_doc,
         ])
-        self.here_controls = PanelControls([
+        self.here_page_controls = PanelControls([
             self.btn_here_prev_page,
             self.btn_here_next_page,
             self.btn_here_add_page,
             self.btn_here_reset_view,
             self.btn_here_del_page,
         ])
+        self.here_controls = QWidget()
+        here_controls_layout = QVBoxLayout(self.here_controls)
+        here_controls_layout.setContentsMargins(0, 0, 0, 0)
+        here_controls_layout.setSpacing(4)
+        here_controls_layout.addWidget(self.here_page_controls, 0)
+        here_draw_row = QHBoxLayout()
+        here_draw_row.setContentsMargins(0, 0, 0, 0)
+        here_draw_row.setSpacing(4)
+        for widget in (
+            self.btn_draw_toggle,
+            self.btn_draw_hline,
+            self.btn_draw_vline,
+            self.draw_line_width,
+            self.btn_draw_box,
+            self.draw_text_size,
+        ):
+            here_draw_row.addWidget(widget, 0)
+        here_draw_row.addStretch(1)
+        here_controls_layout.addLayout(here_draw_row)
         self.origin_panel = PanelColumn(self.origin_header, self.origin_controls, self.origin_view)
         self.clipboard_panel = PanelColumn(self.clipboard_header, None, self.clipboard_view)
         self.here_panel = PanelColumn(self.here_header, self.here_controls, self.here_view)
@@ -351,13 +401,18 @@ class MainWindow(QMainWindow):
                 if 'temp_path' in block:
                     page_blocks[-1]['temp_path'] = block['temp_path']
             pages.append(page_blocks)
+        drawing_pages: list[list[dict]] = []
+        for page in self.here_view.export_drawing_pages():
+            drawing_pages.append([dict(drawing) for drawing in page])
         return {
             'clipboard_items': clipboard_items,
             'clipboard_current_index': self.clipboard_store.current_index,
             'here_pages': pages,
+            'drawing_pages': drawing_pages,
             'here_current_page': self.here_view.current_page_index,
             'here_selected_index': self.here_view.selected_index,
             'here_selected_indices': sorted(self.here_view.selected_indices),
+            'here_selected_drawing_index': self.here_view.selected_drawing_index,
         }
 
     def _restore_snapshot(self, snap: dict) -> None:
@@ -366,6 +421,7 @@ class MainWindow(QMainWindow):
         self.clipboard_view.reload_from_store()
         self._update_clipboard_count()
         self.here_view.restore_pages(snap['here_pages'])
+        self.here_view.restore_drawing_pages(snap.get('drawing_pages'))
         self.here_view.current_page_index = min(max(0, snap.get('here_current_page', 0)), len(self.here_view.pages) - 1)
         self.here_view.selected_index = snap.get('here_selected_index', -1)
         self.here_view.selected_indices = {
@@ -376,6 +432,7 @@ class MainWindow(QMainWindow):
             self.here_view.selected_indices.add(self.here_view.selected_index)
         if self.here_view.selected_index < 0 and self.here_view.selected_indices:
             self.here_view.selected_index = max(self.here_view.selected_indices)
+        self.here_view.selected_drawing_index = snap.get('here_selected_drawing_index', -1)
         self.here_view._emit_selected_clipboard_index()
         self.here_view.update()
         self._update_here_slots()
@@ -450,6 +507,14 @@ class MainWindow(QMainWindow):
         self.clipboard_view.add_item(item)
         self._update_clipboard_count()
         self._set_active_panel('clipboard')
+
+    def _set_here_drawing_tool(self, tool: str) -> None:
+        self.btn_draw_hline.setChecked(tool == 'hline')
+        self.btn_draw_vline.setChecked(tool == 'vline')
+        self.btn_draw_box.setChecked(tool == 'textbox')
+        self.here_view.set_drawing_tool(tool)
+        self.here_view.setFocus()
+        self._set_active_panel('here')
 
     def _send_clipboard_to_here(self, image, row: int) -> None:
         self._push_undo_state()
@@ -626,15 +691,22 @@ class MainWindow(QMainWindow):
         self._update_here_slots()
 
     def _export_pdf(self) -> None:
-        if not any(self.here_view.pages):
-            QMessageBox.information(self, 'PDF 출력', 'HERE 영역에 배치된 블록이 없습니다.')
+        has_blocks = any(self.here_view.pages)
+        has_drawings = any(self.here_view.export_drawing_pages())
+        if not has_blocks and not has_drawings:
+            QMessageBox.information(self, 'PDF 출력', 'HERE 영역에 배치된 블록 또는 드로잉 객체가 없습니다.')
             return
         path, _ = QFileDialog.getSaveFileName(self, 'PDF 저장', str(Path.home() / 'output.pdf'), 'PDF Files (*.pdf)')
         if not path:
             return
         self._show_busy('PDF 출력 중', 'HERE 페이지를 PDF로 내보내는 중...')
         try:
-            self.pdf_exporter.export_pages(self.here_view.export_pages(), path, *self.here_view.scene_size)
+            self.pdf_exporter.export_pages(
+                self.here_view.export_pages(),
+                path,
+                *self.here_view.scene_size,
+                drawing_pages=self.here_view.export_drawing_pages(),
+            )
             QMessageBox.information(self, 'PDF 출력', f'저장 완료\n{path}')
         except Exception as exc:
             QMessageBox.critical(self, 'PDF 출력 오류', str(exc))
@@ -646,7 +718,12 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            saved = self.project_store.save(path, self.clipboard_store, self.here_view.export_pages())
+            saved = self.project_store.save(
+                path,
+                self.clipboard_store,
+                self.here_view.export_pages(),
+                drawing_pages=self.here_view.export_drawing_pages(),
+            )
             QMessageBox.information(self, 'SET Save', f'저장 완료\n{saved}')
         except Exception as exc:
             QMessageBox.critical(self, 'SET Save 오류', str(exc))
@@ -672,6 +749,7 @@ class MainWindow(QMainWindow):
             self.clipboard_view.reload_from_store()
             self._update_clipboard_count()
             self.here_view.restore_pages(data['here_pages'])
+            self.here_view.restore_drawing_pages(data.get('drawing_pages'))
             self._update_here_slots()
             self._set_active_panel('clipboard' if self.clipboard_store.items else 'here')
             self.undo_stack.clear()
@@ -695,6 +773,7 @@ class MainWindow(QMainWindow):
         self.clipboard_view.set_live_preview(None)
         self.origin_view.update()
         self.here_view.restore_pages([[]])
+        self.here_view.restore_drawing_pages([[]])
         self.undo_stack.clear()
         self._update_doc_slots()
         self._update_here_slots()

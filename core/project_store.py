@@ -10,14 +10,21 @@ from core.clipboard_store import ClipboardItem, ClipboardStore
 
 
 class ProjectStore:
-    def save(self, output_path: str, clipboard_store: ClipboardStore, here_pages: list[list[dict]]) -> str:
+    def save(
+        self,
+        output_path: str,
+        clipboard_store: ClipboardStore,
+        here_pages: list[list[dict]],
+        drawing_pages: list[list[dict]] | None = None,
+    ) -> str:
         out = Path(output_path)
         if out.suffix.lower() != '.dcap':
             out = out.with_suffix('.dcap')
         manifest = {
-            'version': 2,
+            'version': 3,
             'clipboard': [],
             'here_pages': [],
+            'drawing_pages': drawing_pages or [[] for _ in here_pages],
         }
         with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
             for idx, item in enumerate(clipboard_store.items, start=1):
@@ -92,4 +99,5 @@ class ProjectStore:
                         'content_right': block.get('content_right', block.get('w', 0)),
                     })
                 pages.append(page_blocks)
-        return {'clipboard_items': clipboard_items, 'here_pages': pages or [[]]}
+        drawing_pages = manifest.get('drawing_pages') or [[] for _ in pages]
+        return {'clipboard_items': clipboard_items, 'here_pages': pages or [[]], 'drawing_pages': drawing_pages}

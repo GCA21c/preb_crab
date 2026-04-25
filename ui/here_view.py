@@ -4,7 +4,8 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QFont, QImage, QKeySequence, QPainter, QPen
+from PySide6.QtWidgets import QInputDialog
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from core.capture_utils import find_content_bounds
@@ -17,14 +18,23 @@ class HereView(QWidget):
     delete_requested = Signal(object)
     history_checkpoint_requested = Signal()
     duplicate_to_clipboard_requested = Signal(object, object)
+    undo_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.pages: list[list[dict]] = [[]]
+        self.drawing_pages: list[list[dict]] = [[]]
         self.page_view_states: list[dict] = [{'zoom': 0.55, 'pan_x': 0.0, 'pan_y': 0.0}]
         self.current_page_index: int = 0
         self.selected_index: int = -1
         self.selected_indices: set[int] = set()
+        self.selected_drawing_index: int = -1
+        self.drawing_enabled = False
+        self.drawing_tool: str = 'hline'
+        self.drawing_line_width = 0.5
+        self.drawing_text_size = 14
+        self.drawing_in_progress: dict | None = None
+        self.drawing_start_scene = QPointF()
         self.drag_last = QPointF()
         self.space_pressed = False
         self.middle_panning = False
@@ -57,6 +67,12 @@ class HereView(QWidget):
     def blocks(self) -> list[dict]:
         return self.pages[self.current_page_index]
 
+    @property
+    def drawings(self) -> list[dict]:
+        while len(self.drawing_pages) < len(self.pages):
+            self.drawing_pages.append([])
+        return self.drawing_pages[self.current_page_index]
+
     def enterEvent(self, event) -> None:
         self.interaction_started.emit('here')
         super().enterEvent(event)
@@ -80,6 +96,7 @@ class HereView(QWidget):
     def add_page(self) -> None:
         self._save_current_view_state()
         self.pages.append([])
+        self.drawing_pages.append([])
         self.page_view_states.append({'zoom': self.default_zoom, 'pan_x': self.default_pan.x(), 'pan_y': self.default_pan.y()})
         self.current_page_index = len(self.pages) - 1
         self._clear_selection()
@@ -91,11 +108,14 @@ class HereView(QWidget):
         self._save_current_view_state()
         if len(self.pages) <= 1:
             self.pages[0].clear()
+            self.drawing_pages = [[]]
             self.page_view_states = [{'zoom': self.default_zoom, 'pan_x': self.default_pan.x(), 'pan_y': self.default_pan.y()}]
             self._clear_selection()
             self.reset_view()
         else:
             self.pages.pop(self.current_page_index)
+            if self.current_page_index < len(self.drawing_pages):
+                self.drawing_pages.pop(self.current_page_index)
             if self.current_page_index < len(self.page_view_states):
                 self.page_view_states.pop(self.current_page_index)
             self.current_page_index = max(0, self.current_page_index - 1)
@@ -124,6 +144,23 @@ class HereView(QWidget):
     def set_pending_drag_image(self, image: QImage | None, source_index: int = -1) -> None:
         self.pending_drag_image = image
         self.pending_drag_source_index = source_index
+
+    def set_drawing_enabled(self, enabled: bool) -> None:
+        self.drawing_enabled = bool(enabled)
+        if not self.drawing_enabled:
+            self.selected_drawing_index = -1
+            self.drawing_in_progress = None
+        self.update()
+
+    def set_drawing_tool(self, tool: str) -> None:
+        if tool in {'hline', 'vline', 'textbox'}:
+            self.drawing_tool = tool
+
+    def set_drawing_line_width(self, width: float) -> None:
+        self.drawing_line_width = max(0.1, min(3.0, float(width)))
+
+    def set_drawing_text_size(self, size: int) -> None:
+        self.drawing_text_size = max(6, min(72, int(size)))
 
     def reset_view(self) -> None:
         self.zoom = self.default_zoom
@@ -202,6 +239,10 @@ class HereView(QWidget):
 
     def restore_pages(self, pages: list[list[dict]]) -> None:
         self.pages = pages if pages else [[]]
+        while len(self.drawing_pages) < len(self.pages):
+            self.drawing_pages.append([])
+        if len(self.drawing_pages) > len(self.pages):
+            self.drawing_pages = self.drawing_pages[:len(self.pages)]
         self.page_view_states = [{'zoom': self.default_zoom, 'pan_x': self.default_pan.x(), 'pan_y': self.default_pan.y()} for _ in self.pages]
         self.current_page_index = 0
         self._clear_selection()
@@ -224,6 +265,20 @@ class HereView(QWidget):
 
     def export_pages(self) -> list[list[dict]]:
         return self.pages
+
+    def restore_drawing_pages(self, drawing_pages: list[list[dict]] | None) -> None:
+        self.drawing_pages = drawing_pages if drawing_pages else [[] for _ in self.pages]
+        while len(self.drawing_pages) < len(self.pages):
+            self.drawing_pages.append([])
+        if len(self.drawing_pages) > len(self.pages):
+            self.drawing_pages = self.drawing_pages[:len(self.pages)]
+        self.selected_drawing_index = -1
+        self.update()
+
+    def export_drawing_pages(self) -> list[list[dict]]:
+        while len(self.drawing_pages) < len(self.pages):
+            self.drawing_pages.append([])
+        return self.drawing_pages
 
     def delete_selected_block(self) -> None:
         indices = self._selected_indices_sorted()
@@ -283,6 +338,7 @@ class HereView(QWidget):
     def _clear_selection(self) -> None:
         self.selected_index = -1
         self.selected_indices.clear()
+        self.selected_drawing_index = -1
 
     def _set_single_selection(self, index: int) -> None:
         if 0 <= index < len(self.blocks):
@@ -345,6 +401,121 @@ class HereView(QWidget):
     def _block_rect_view(self, block: dict) -> QRectF:
         page_rect = self._page_rect_view()
         return QRectF(page_rect.x() + block['x'] * self.zoom, page_rect.y() + block['y'] * self.zoom, block['w'] * self.zoom, block['h'] * self.zoom)
+
+    def _drawing_rect_view(self, drawing: dict) -> QRectF:
+        page_rect = self._page_rect_view()
+        if drawing.get('type') == 'textbox':
+            return QRectF(
+                page_rect.x() + float(drawing.get('x', 0.0)) * self.zoom,
+                page_rect.y() + float(drawing.get('y', 0.0)) * self.zoom,
+                float(drawing.get('w', 0.0)) * self.zoom,
+                float(drawing.get('h', 0.0)) * self.zoom,
+            )
+        x1 = page_rect.x() + float(drawing.get('x1', 0.0)) * self.zoom
+        y1 = page_rect.y() + float(drawing.get('y1', 0.0)) * self.zoom
+        x2 = page_rect.x() + float(drawing.get('x2', 0.0)) * self.zoom
+        y2 = page_rect.y() + float(drawing.get('y2', 0.0)) * self.zoom
+        return QRectF(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)).adjusted(-4, -4, 4, 4)
+
+    def _drawing_at(self, pos: QPointF) -> int:
+        for i in reversed(range(len(self.drawings))):
+            drawing = self.drawings[i]
+            if drawing.get('type') == 'textbox':
+                if self._drawing_rect_view(drawing).contains(pos):
+                    return i
+            else:
+                if self._drawing_rect_view(drawing).contains(pos):
+                    return i
+        return -1
+
+    def _clamp_scene_point(self, point: QPointF) -> QPointF:
+        return QPointF(
+            max(0.0, min(float(self.scene_size[0]), float(point.x()))),
+            max(0.0, min(float(self.scene_size[1]), float(point.y()))),
+        )
+
+    def _begin_drawing(self, scene_pos: QPointF) -> None:
+        self.history_checkpoint_requested.emit()
+        start = self._clamp_scene_point(scene_pos)
+        self.drawing_start_scene = QPointF(start)
+        if self.drawing_tool == 'textbox':
+            self.drawing_in_progress = {
+                'type': 'textbox',
+                'x': start.x(),
+                'y': start.y(),
+                'w': 1.0,
+                'h': 1.0,
+                'text': '',
+                'font_size': int(self.drawing_text_size),
+            }
+        else:
+            self.drawing_in_progress = {
+                'type': 'line',
+                'orientation': self.drawing_tool,
+                'x1': start.x(),
+                'y1': start.y(),
+                'x2': start.x(),
+                'y2': start.y(),
+                'width': float(self.drawing_line_width),
+            }
+        self.drawings.append(self.drawing_in_progress)
+        self.selected_drawing_index = len(self.drawings) - 1
+
+    def _update_drawing(self, scene_pos: QPointF) -> None:
+        drawing = self.drawing_in_progress
+        if drawing is None:
+            return
+        current = self._clamp_scene_point(scene_pos)
+        start = self.drawing_start_scene
+        if drawing.get('type') == 'textbox':
+            x = min(start.x(), current.x())
+            y = min(start.y(), current.y())
+            drawing['x'] = x
+            drawing['y'] = y
+            drawing['w'] = max(1.0, abs(current.x() - start.x()))
+            drawing['h'] = max(1.0, abs(current.y() - start.y()))
+            return
+        if drawing.get('orientation') == 'vline':
+            drawing['x2'] = start.x()
+            drawing['y2'] = current.y()
+        else:
+            drawing['x2'] = current.x()
+            drawing['y2'] = start.y()
+
+    def _finish_drawing(self) -> None:
+        drawing = self.drawing_in_progress
+        self.drawing_in_progress = None
+        if drawing is None:
+            return
+        if drawing.get('type') == 'textbox':
+            if float(drawing.get('w', 0.0)) < 8.0 or float(drawing.get('h', 0.0)) < 8.0:
+                if drawing in self.drawings:
+                    self.drawings.remove(drawing)
+                self.selected_drawing_index = -1
+                return
+            text, ok = QInputDialog.getMultiLineText(self, '텍스트 박스', '텍스트 입력:', str(drawing.get('text', '')))
+            if not ok or not text.strip():
+                if drawing in self.drawings:
+                    self.drawings.remove(drawing)
+                self.selected_drawing_index = -1
+                return
+            drawing['text'] = text
+            return
+        if abs(float(drawing.get('x2', 0.0)) - float(drawing.get('x1', 0.0))) < 3.0 and abs(float(drawing.get('y2', 0.0)) - float(drawing.get('y1', 0.0))) < 3.0:
+            if drawing in self.drawings:
+                self.drawings.remove(drawing)
+            self.selected_drawing_index = -1
+
+    def delete_selected_drawing(self) -> bool:
+        if not self.drawing_enabled:
+            return False
+        if not (0 <= self.selected_drawing_index < len(self.drawings)):
+            return False
+        self.history_checkpoint_requested.emit()
+        self.drawings.pop(self.selected_drawing_index)
+        self.selected_drawing_index = -1
+        self.update()
+        return True
 
     def _resize_handle_visual_rect(self, block: dict, handle: str) -> QRectF:
         rect = self._block_rect_view(block)
@@ -489,6 +660,19 @@ class HereView(QWidget):
             self.panning = True
             self.setCursor(Qt.ClosedHandCursor)
             return
+        if self.drawing_enabled and self._page_rect_view().contains(pos):
+            drawing_index = self._drawing_at(pos)
+            if drawing_index >= 0:
+                self.selected_drawing_index = drawing_index
+                self.selected_index = -1
+                self.selected_indices.clear()
+                self.update()
+                return
+            self.selected_drawing_index = -1
+            self._clear_selection()
+            self._begin_drawing(self._view_to_scene(pos))
+            self.update()
+            return
         for i in reversed(range(len(self.blocks))):
             block = self.blocks[i]
             handle = self._resize_handle_at(block, pos)
@@ -535,6 +719,10 @@ class HereView(QWidget):
     def mouseMoveEvent(self, event) -> None:
         pos = event.position()
         delta = pos - self.drag_last
+        if self.drawing_enabled and self.drawing_in_progress is not None and (event.buttons() & Qt.LeftButton):
+            self._update_drawing(self._view_to_scene(pos))
+            self.update()
+            return
         if self.panning:
             self.pan -= QPointF(delta.x(), delta.y())
             self.drag_last = pos
@@ -625,6 +813,8 @@ class HereView(QWidget):
         self.dragging_block = False
         self.resizing_block = False
         self.resize_mode = None
+        if self.drawing_in_progress is not None:
+            self._finish_drawing()
         self._clear_guides()
         if self.space_pressed:
             self.setCursor(Qt.OpenHandCursor)
@@ -652,8 +842,12 @@ class HereView(QWidget):
             return
         if event.key() == Qt.Key_Delete:
             if not event.isAutoRepeat():
-                self.history_checkpoint_requested.emit()
-                self.delete_selected_block()
+                if not self.delete_selected_drawing():
+                    self.history_checkpoint_requested.emit()
+                    self.delete_selected_block()
+            return
+        if event.matches(QKeySequence.Undo):
+            self.undo_requested.emit()
             return
         if event.key() == Qt.Key_C and mods & Qt.ControlModifier:
             if not event.isAutoRepeat():
@@ -785,6 +979,8 @@ class HereView(QWidget):
                 view_y = page_rect.y() + scene_y * self.zoom
                 painter.drawLine(page_rect.left(), view_y, page_rect.right(), view_y)
 
+        self._paint_drawings(painter)
+
         for i, block in enumerate(self.blocks):
             rect = self._block_rect_view(block)
             painter.drawImage(rect, block['image'])
@@ -797,3 +993,36 @@ class HereView(QWidget):
                     painter.setBrush(QColor('#d12c2c'))
                     for handle in ('corner', 'right', 'bottom'):
                         painter.drawEllipse(self._resize_handle_visual_rect(block, handle))
+
+    def _paint_drawings(self, painter: QPainter) -> None:
+        for i, drawing in enumerate(self.drawings):
+            if drawing.get('type') == 'textbox':
+                self._paint_textbox(painter, drawing, selected=self.drawing_enabled and i == self.selected_drawing_index)
+            else:
+                self._paint_line(painter, drawing, selected=self.drawing_enabled and i == self.selected_drawing_index)
+
+    def _paint_line(self, painter: QPainter, drawing: dict, *, selected: bool) -> None:
+        page_rect = self._page_rect_view()
+        x1 = page_rect.x() + float(drawing.get('x1', 0.0)) * self.zoom
+        y1 = page_rect.y() + float(drawing.get('y1', 0.0)) * self.zoom
+        x2 = page_rect.x() + float(drawing.get('x2', 0.0)) * self.zoom
+        y2 = page_rect.y() + float(drawing.get('y2', 0.0)) * self.zoom
+        width = max(0.1, float(drawing.get('width', 0.5))) * self.zoom
+        painter.setPen(QPen(QColor('#111111'), max(1.0, width)))
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        if selected:
+            painter.setPen(QPen(QColor('#d12c2c'), 1, Qt.DashLine))
+            painter.drawRect(self._drawing_rect_view(drawing))
+
+    def _paint_textbox(self, painter: QPainter, drawing: dict, *, selected: bool) -> None:
+        rect = self._drawing_rect_view(drawing)
+        painter.setPen(QPen(QColor('#111111'), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(rect)
+        font = QFont()
+        font.setPointSize(max(6, int(drawing.get('font_size', 14))))
+        painter.setFont(font)
+        painter.drawText(rect.adjusted(6, 4, -6, -4), int(Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap), str(drawing.get('text', '')))
+        if selected:
+            painter.setPen(QPen(QColor('#d12c2c'), 1, Qt.DashLine))
+            painter.drawRect(rect.adjusted(-3, -3, 3, 3))
